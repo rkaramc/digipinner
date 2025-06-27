@@ -1,228 +1,165 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import mapboxgl, { Map as MapboxMap, NavigationControl, MapMouseEvent } from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import DigipinBounds from './DigipinBounds';
-import { 
-  MAPBOX_ACCESS_TOKEN, 
-  MAP_STYLE, 
-  DEFAULT_MAP_CENTER, 
+import React, { useEffect, useRef, useState } from "react";
+import mapboxgl, {
+  Map as MapboxMap,
+  NavigationControl,
+  MapMouseEvent,
+  Marker,
+} from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import PinCodeLayer from "./PinCodeLayer";
+import {
+  MAPBOX_ACCESS_TOKEN,
+  MAP_STYLE,
+  DEFAULT_MAP_CENTER,
   DEFAULT_ZOOM_LEVEL,
-  DIGIPIN_GRID 
-} from '../lib/constants';
+  SAMPLE_PIN_CODE_DATA,
+} from "../lib/constants";
+import ErrorBoundary from "@/utils/ErrorBoundary";
 
-// Extend the window type to include mapboxgl
 declare global {
   interface Window {
     mapboxgl: typeof mapboxgl;
   }
 }
 
-// Set the access token at the module level
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
-// Workaround for strict mode in development
 if (!window.mapboxgl) {
   window.mapboxgl = mapboxgl;
 }
 
 interface MapViewProps {
-  onMapReady?: () => void;
-  onMapClick?: (e: MapMouseEvent) => void;
   center?: [number, number];
   zoom?: number;
   style?: React.CSSProperties;
   className?: string;
+  enableMarkerPlacement?: boolean;
 }
 
 const MapView: React.FC<MapViewProps> = ({
-  onMapReady,
-  onMapClick,
   center = DEFAULT_MAP_CENTER,
   zoom = DEFAULT_ZOOM_LEVEL,
   style,
-  className = '',
+  className = "",
+  enableMarkerPlacement = false,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<MapboxMap | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [markerPosition, setMarkerPosition] = useState<{
+    lng: number;
+    lat: number;
+  } | null>(null);
 
-  // Initialize the map when the component mounts
+  const currentMarkerRef = useRef<Marker | null>(null);
+
   useEffect(() => {
-    // Skip if container ref is not available or map is already initialized
-    if (!mapContainer.current || map.current) {
-      return;
-    }
+    if (map.current) return; // Initialize map only once
 
-    console.log('Initializing map...');
-    
-    // Store the map instance in a local variable to avoid stale closures
-    let mapInstance: MapboxMap | null = null;
     let isMounted = true;
-    
+
     const initializeMap = () => {
-      if (!isMounted) return;
-      
+      if (!isMounted || !mapContainer.current) return;
+
       try {
-        // Create the map instance
-        mapInstance = new MapboxMap({
-          container: mapContainer.current!,
+        console.log("MapView: Initializing map with style:", MAP_STYLE);
+
+        // Check if MAPBOX_ACCESS_TOKEN is set
+        if (!mapboxgl.accessToken) {
+          console.error("MapView: Mapbox access token is not set!");
+          setMapError(
+            "Mapbox access token is missing. Please check your configuration."
+          );
+          return;
+        }
+
+        const mapInstance = new MapboxMap({
+          container: mapContainer.current,
           style: MAP_STYLE,
           center,
           zoom,
           attributionControl: true,
-          transformRequest: (url, resourceType) => {
-            // Add cache-busting query parameter to style URL
-            // if (resourceType === 'Style' && !url.includes('?')) {
-            //   return { url: `${url}?v=${Date.now()}` };
-            // }
-            return { url };
-          },
         });
-        
-        // Store the map instance in the ref
+
         map.current = mapInstance;
 
-        // Add navigation control
-        mapInstance.addControl(new NavigationControl(), 'top-right');
-        
-        // Handle map load
-        const onMapLoad = () => {
-          if (!isMounted || !mapInstance) return;
-          
-          console.log('Map loaded, setting up bounds');
-          
-          try {
-            console.log('Map style loaded, checking layers:', 
-              mapInstance.getStyle().layers.map(l => l.id)
-            );
-            
-            const fitToBounds = () => {
-              if (!isMounted || !mapInstance) return;
-              
-              try {
-                console.log('Fitting map to DIGIPIN bounds');
-                
-                // Get the bounds from DIGIPIN_GRID.BOUNDS
-                const { MIN_LON, MAX_LON, MIN_LAT, MAX_LAT } = DIGIPIN_GRID.BOUNDS;
-                
-                // Create a bounds object
-                const bounds = new mapboxgl.LngLatBounds(
-                  [MIN_LON, MIN_LAT], // SW
-                  [MAX_LON, MAX_LAT]  // NE
-                );
-                
-                // Add some padding
-                const padding = {
-                  top: 10,
-                  bottom: 10,
-                  left: 10,
-                  right: 10
-                };
-                
-                console.log('Fitting to bounds:', {
-                  sw: [MIN_LON, MIN_LAT],
-                  ne: [MAX_LON, MAX_LAT],
-                  padding
-                });
-                
-                // Fit the map to the bounds with padding
-                mapInstance.fitBounds(bounds, {
-                  padding,
-                  maxZoom: 15,
-                  duration: 1000 // Animation duration in ms
-                });
-                
-                console.log('Map fitted to bounds successfully');
-                
-                // Mark map as loaded
-                if (isMounted) {
-                  setIsMapLoaded(true);
-                  onMapReady?.();
-                }
-                
-              } catch (error) {
-                console.error('Error fitting map to bounds:', error);
-                if (isMounted) {
-                  setIsMapLoaded(true);
-                  onMapReady?.();
-                }
-              }
-            };
-            
-            // If the map is already loaded, fit bounds immediately
-            if (mapInstance.loaded() && mapInstance.isStyleLoaded()) {
-              fitToBounds();
-            } else {
-              // Otherwise, wait for the style to load
-              mapInstance.once('style.load', fitToBounds);
-            }
-            
-          } catch (error) {
-            console.error('Error in map load handler:', error);
-            if (isMounted) {
-              setIsMapLoaded(true);
-              onMapReady?.();
-            }
-          }
-        };
-        
-        // Set up the load event listener
-        mapInstance.once('load', onMapLoad);
-        
-        // Set up click handler if provided
-        if (onMapClick) {
-          mapInstance.on('click', onMapClick);
-        }
-        
-        // Set up error handling
-        mapInstance.on('error', (e) => {
-          console.error('Map error:', e.error);
-          if (isMounted) {
-            setMapError(e.error?.message || 'Failed to load map');
-          }
+        mapInstance.addControl(new NavigationControl(), "top-right");
+
+        // Listen for style.load event to ensure style is fully loaded
+        mapInstance.on("style.load", () => {
+          if (!isMounted || map.current !== mapInstance) return;
+          console.log("MapView: Map style loaded", mapInstance.getStyle());
         });
-        
+
+        mapInstance.on("load", () => {
+          // In strict mode, the component can be mounted, unmounted, and remounted.
+          // We need to ensure that this 'load' event is for the current map instance.
+          if (!isMounted || map.current !== mapInstance) return;
+
+          console.log("MapView: Map load event fired");
+          currentMarkerRef.current?.addTo(mapInstance);
+
+          // Add a small delay to ensure the map is fully initialized
+          setTimeout(() => {
+            if (isMounted && map.current === mapInstance) {
+              console.log("MapView: Setting map as loaded after delay");
+              setIsMapLoaded(true);
+              setMapReady(true);
+            }
+          }, 0);
+        });
+
+        mapInstance.on("click", (e: MapMouseEvent) => {
+          console.log("MapView: Map click event fired", e);
+          if (enableMarkerPlacement) {
+            const { lng, lat } = e.lngLat;
+
+            if (currentMarkerRef.current) {
+              currentMarkerRef.current.remove();
+            }
+
+            const newMarker = new Marker({ color: "#FF0000" })
+              .setLngLat([lng, lat])
+              .addTo(mapInstance);
+
+            currentMarkerRef.current = newMarker;
+
+            setMarkerPosition({ lng, lat });
+          }
+          console.log("MapView: Map click event done!");
+        });
+
+        mapInstance.on("error", (e) => {
+          if (!isMounted) return;
+          setMapError(e.error?.message || "Failed to load map");
+        });
       } catch (error) {
-        console.error('Failed to initialize map:', error);
-        if (isMounted) {
-          setMapError('Failed to initialize map. Please check your connection and try again.');
-          setIsMapLoaded(true);
-          onMapReady?.();
-        }
+        if (!isMounted) return;
+        setMapError(
+          "Failed to initialize map. Please check your connection and try again."
+        );
       }
     };
-    
-    // Initialize the map in the next tick to avoid React 18 double mount in development
-    const timeoutId = setTimeout(initializeMap, 0);
-    
-    // Cleanup function
+
+    const timerId = setTimeout(initializeMap, 0);
+
     return () => {
+      console.log("MapView: Unmounting map");
       isMounted = false;
-      clearTimeout(timeoutId);
-      
-      if (mapInstance) {
-        console.log('Cleaning up map instance');
-        try {
-          if (onMapClick) {
-            mapInstance.off('click', onMapClick);
-          }
-          mapInstance.remove();
-        } catch (error) {
-          console.error('Error during map cleanup:', error);
-        } finally {
-          mapInstance = null;
-          if (map.current) {
-            map.current = null;
-          }
-        }
+      clearTimeout(timerId);
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
       }
     };
-  }, [center, zoom, onMapReady, onMapClick]);
+  }, [
+    center,
+    zoom,
+    enableMarkerPlacement,
+  ]);
 
-  // This effect is no longer needed as we've moved all initialization to the main effect
-
-  // Render loading state or error message
   if (mapError) {
     return (
       <div className="flex items-center justify-center w-full h-full bg-gray-100">
@@ -242,45 +179,28 @@ const MapView: React.FC<MapViewProps> = ({
 
   return (
     <div className="relative w-full h-full">
-      <div 
-        ref={mapContainer} 
+      <div
+        ref={mapContainer}
         className={`w-full h-full ${className}`}
         style={style}
       />
       {isMapLoaded && map.current && (
-        <>
-          <div className="absolute flex flex-col gap-2 bottom-4 right-4 z-10">
-            {/* <div className="bg-white p-2 rounded shadow-md text-xs">
-              Map loaded successfully
-            </div> */}
-            <button 
-              onClick={() => {
-                if (!map.current) return;
-                console.log('=== MAP DEBUG INFO ===');
-                console.log('Map style:', map.current.getStyle());
-                console.log('Map sources:', Object.keys(map.current.getStyle().sources));
-                console.log('Map layers:', map.current.getStyle().layers.map(l => l.id));
-                console.log('Map bounds:', map.current.getBounds().toArray());
-                console.log('Map zoom:', map.current.getZoom());
-                console.log('Map center:', map.current.getCenter());
-                console.log('========================');
-              }}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-xs"
-            >
-              Debug Map
-            </button>
-          </div>
-          <DigipinBounds 
-            // key={`digipin-bounds-${Date.now()}`} // Force re-render with new key
-            key={`digipin-bounds`} // Force re-render with new key
-            map={map.current} 
-            showFill={true}
-            showOutline={true}
-            fillColor="rgba(0, 0, 255, 0.3)" // More visible blue fill
-            outlineColor="#ff0000"
+        <ErrorBoundary fallback={<h1>Something went wrong.</h1>}>
+          <PinCodeLayer
+            map={map.current}
+            visible={true}
+            fillColor="rgba(0, 100, 255, 0.1)"
+            outlineColor="#0064ff"
             outlineWidth={1}
+            useDirectData={true}
+            pinCodeData={SAMPLE_PIN_CODE_DATA}
+            autoZoom={true}
+            onLayerLoaded={() =>
+              console.log("PinCodeLayer loaded successfully")
+            }
+            onError={(error) => console.error("PIN code layer error:", error)}
           />
-        </>
+        </ErrorBoundary>
       )}
       {!isMapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
@@ -290,6 +210,15 @@ const MapView: React.FC<MapViewProps> = ({
           </div>
         </div>
       )}
+      {markerPosition && (
+        <div className="mt-4 p-4 bg-white shadow rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900">Marker Position</h3>
+          <p className="mt-2 text-sm text-gray-500">
+            Longitude: {markerPosition.lng.toFixed(6)}, Latitude:{" "}
+            {markerPosition.lat.toFixed(6)}
+          </p>
+        </div>
+      )}{" "}
     </div>
   );
 };
