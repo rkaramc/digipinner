@@ -121,9 +121,37 @@ const MapboxBounds: React.FC<MapboxBoundsProps> = ({
     
     // Function to safely check if a source exists
     const sourceExists = (srcId: string): boolean => {
-      if (!map) return false;
+      if (!map) {
+        console.log('Map is not available');
+        return false;
+      }
+      
       try {
-        return map.getSource ? !!map.getSource(srcId) : false;
+        // Check if map is valid and has required methods
+        if (!map.getSource || typeof map.getSource !== 'function') {
+          console.warn('map.getSource is not available or not a function');
+          return false;
+        }
+        
+        // Check if the style is loaded
+        if (!map.getStyle || typeof map.getStyle !== 'function') {
+          console.warn('map.getStyle is not available or not a function');
+          return false;
+        }
+        
+        // Check if style object exists and has sources
+        const style = map.getStyle();
+        if (!style || !style.sources) {
+          console.warn('Map style or sources not available');
+          return false;
+        }
+        
+        // Try to get the source
+        const source = map.getSource(srcId);
+        const exists = !!source;
+        console.log(`Source ${srcId} ${exists ? 'exists' : 'does not exist'}`);
+        return exists;
+        
       } catch (error) {
         console.warn(`Error checking source ${srcId}:`, error);
         return false;
@@ -132,35 +160,62 @@ const MapboxBounds: React.FC<MapboxBoundsProps> = ({
     
     // Function to safely remove layers and source
     const cleanup = () => {
-      if (!map) return;
+      if (!map) {
+        console.log('Map not available for cleanup');
+        return;
+      }
       
+      // Check if map is still valid and has required methods
+      if (!map.removeLayer || typeof map.removeLayer !== 'function' || 
+          !map.removeSource || typeof map.removeSource !== 'function') {
+        console.warn('Map methods not available for cleanup');
+        return;
+      }
+      
+      // Check if map is still attached to DOM
       try {
-        // Remove layers if they exist
-        if (layerExists(fillLayerId)) {
-          map.removeLayer(fillLayerId);
-          console.log('Removed fill layer:', fillLayerId);
-        }
-        
-        if (layerExists(outlineLayerId)) {
-          map.removeLayer(outlineLayerId);
-          console.log('Removed outline layer:', outlineLayerId);
-        }
-        
-        // Remove source if it exists
-        if (sourceExists(sourceId)) {
-          // Remove layers first to avoid style errors
-          if (layerExists(fillLayerId)) {
-            map.removeLayer(fillLayerId);
-          }
-          if (layerExists(outlineLayerId)) {
-            map.removeLayer(outlineLayerId);
-          }
-          
-          map.removeSource(sourceId);
-          console.log('Removed source:', sourceId);
+        if (!map.getContainer()) {
+          console.warn('Map container no longer exists, skipping cleanup');
+          return;
         }
       } catch (error) {
-        console.error('Error during cleanup:', error);
+        console.warn('Error checking map container, skipping cleanup:', error);
+        return;
+      }
+      
+      console.log('Starting cleanup for source:', sourceId);
+      
+      // Function to safely remove a single layer
+      const safeRemoveLayer = (layerId: string) => {
+        try {
+          if (layerExists(layerId)) {
+            map?.removeLayer(layerId);
+            console.log('Removed layer:', layerId);
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.warn(`Error removing layer ${layerId}:`, error);
+          return false;
+        }
+      };
+      
+      // Remove layers if they exist
+      safeRemoveLayer(fillLayerId);
+      safeRemoveLayer(outlineLayerId);
+      
+      // Remove source if it exists
+      try {
+        // Double-check map is still valid before removing source
+        if (map && map.getStyle && sourceExists(sourceId)) {
+          // Try to remove source
+          map.removeSource(sourceId);
+          console.log('Removed source:', sourceId);
+        } else {
+          console.log('Source did not exist, nothing to remove:', sourceId);
+        }
+      } catch (error) {
+        console.error('Error removing source:', sourceId, error);
       }
     };
 
@@ -191,11 +246,38 @@ const MapboxBounds: React.FC<MapboxBoundsProps> = ({
         return;
       }
       
-      // Wait for map to be fully loaded with style
+      // Enhanced map ready check
       const checkMapReady = () => {
         try {
-          return map.loaded() && map.isStyleLoaded() && map.getStyle();
+          // Check basic map state
+          if (!map || typeof map.loaded !== 'function' || !map.loaded()) {
+            console.log('Map not loaded yet');
+            return false;
+          }
+          
+          // Check style is loaded
+          if (typeof map.isStyleLoaded !== 'function' || !map.isStyleLoaded()) {
+            console.log('Map style not loaded yet');
+            return false;
+          }
+          
+          // Check style object exists
+          if (typeof map.getStyle !== 'function') {
+            console.log('getStyle not available');
+            return false;
+          }
+          
+          const style = map.getStyle();
+          if (!style || !style.sources) {
+            console.log('Style or sources not available');
+            return false;
+          }
+          
+          console.log('Map is ready with style:', style);
+          return true;
+          
         } catch (error) {
+          console.error('Error checking map ready state:', error);
           return false;
         }
       };
@@ -264,60 +346,97 @@ const MapboxBounds: React.FC<MapboxBoundsProps> = ({
           try {
             map.addSource(sourceId, {
               type: 'geojson',
-              data: sourceData
+              data: {
+                type: 'Feature',
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: bounds
+                },
+                properties: {}
+              }
             });
-            console.log('Source added successfully');
+            console.log('Source added successfully:', sourceId);
+            
+            // Add fill layer if enabled
+            if (showFill) {
+              const fillLayer = {
+                id: fillLayerId,
+                type: 'fill' as const,
+                source: sourceId,
+                layout: {},
+                paint: {
+                  'fill-color': fillColor,
+                  'fill-opacity': fillOpacity
+                }
+              };
+              
+              if (safeAddLayer(fillLayer)) {
+                console.log('Fill layer added successfully:', fillLayerId);
+              } else {
+                console.error('Failed to add fill layer:', fillLayerId);
+              }
+            }
+            
+            // Add outline layer if enabled
+            if (showOutline) {
+              const outlineLayer = {
+                id: outlineLayerId,
+                type: 'line' as const,
+                source: sourceId,
+                layout: {
+                  'line-join': 'round',
+                  'line-cap': 'round'
+                },
+                paint: {
+                  'line-color': outlineColor,
+                  'line-width': outlineWidth,
+                  'line-dasharray': outlineDashArray
+                }
+              };
+              
+              if (safeAddLayer(outlineLayer)) {
+                console.log('Outline layer added successfully:', outlineLayerId);
+                
+                // Force a style update to ensure the layer is rendered
+                try {
+                  const style = map.getStyle();
+                  map.setStyle(style, { diff: false });
+                  console.log('Map style refreshed to ensure layer visibility');
+                } catch (e) {
+                  console.warn('Could not refresh map style:', e);
+                }
+              } else {
+                console.error('Failed to add outline layer:', outlineLayerId);
+              }
+            }
+            
+            // Fit map to bounds if they exist
+            try {
+              if (bounds && bounds[0] && bounds[0].length > 0) {
+                const coordinates = bounds[0];
+                const lngs = coordinates.map(coord => coord[0]);
+                const lats = coordinates.map(coord => coord[1]);
+                
+                const bounds = [
+                  [Math.min(...lngs), Math.min(...lats)], // southwest
+                  [Math.max(...lngs), Math.max(...lats)]  // northeast
+                ];
+                
+                map.fitBounds(bounds as [[number, number], [number, number]], {
+                  padding: 50,
+                  maxZoom: 10,
+                  duration: 1000
+                });
+                console.log('Map fitted to bounds');
+              }
+            } catch (e) {
+              console.warn('Could not fit map to bounds:', e);
+            }
+            
           } catch (sourceError) {
-            console.error('Error adding source:', sourceError);
-            return;
+            console.error('Error adding source or layers:', sourceError);
           }
           
-          // Add fill layer if enabled
-          if (showFill) {
-            console.log('Adding fill layer:', fillLayerId);
-            const fillLayer = {
-              id: fillLayerId,
-              type: 'fill' as const,
-              source: sourceId,
-              layout: {},
-              paint: {
-                'fill-color': fillColor,
-                'fill-opacity': fillOpacity,
-                'fill-outline-color': 'transparent'
-              }
-            };
-            
-            console.log('Fill layer config:', JSON.stringify(fillLayer, null, 2));
-            const fillAdded = safeAddLayer(fillLayer, 'water');
-            console.log('Fill layer', fillAdded ? 'added successfully' : 'failed to add');
-          }
-
-          // Add outline layer if enabled
-          if (showOutline) {
-            console.log('Adding outline layer:', outlineLayerId);
-            const lineLayer = {
-              id: outlineLayerId,
-              type: 'line' as const,
-              source: sourceId,
-              layout: {
-                'line-join': 'round',
-                'line-cap': 'round'
-              },
-              paint: {
-                'line-color': outlineColor,
-                'line-width': outlineWidth,
-                'line-dasharray': outlineDashArray,
-                'line-opacity': 1
-              }
-            };
-            
-            console.log('Outline layer config:', JSON.stringify(lineLayer, null, 2));
-            const outlineAdded = safeAddLayer(lineLayer, fillLayerId);
-            console.log('Outline layer', outlineAdded ? 'added successfully' : 'failed to add');
-          }
-          
-          // Log final state
-          const finalStyle = map.getStyle();
           console.log('Updated sources:', Object.keys(finalStyle.sources));
           console.log('Updated layers:', finalStyle.layers.map(l => l.id));
           
