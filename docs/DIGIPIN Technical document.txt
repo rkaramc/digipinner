@@ -121,6 +121,15 @@ efficient digital representation of addresses.
 6
 3.3 Labelling of regions at various levels
 Figure 2: Labelling of DIGIPIN level-1 grids (left) and 4x4 grid used for labelling (right)
+
+F < C < 9 < 8
+v           ^
+J   3 < 2   7
+v   v       ^
+K   4 > 5 > 6
+v          
+L > M > P > T
+
  In first iteration (level-1), the bounding box is divided into 16 regions using a 4x4 grid
 and each region is labelled using 16 symbols, 2, 3, 4, 5, 6, 7, 8, 9, C, F, J, K, L, M, P, and
 T, as shown in Figure 2.

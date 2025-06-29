@@ -12,9 +12,9 @@ import {
   MAP_STYLE,
   DEFAULT_MAP_CENTER,
   DEFAULT_ZOOM_LEVEL,
-  SAMPLE_PIN_CODE_DATA,
 } from "../lib/constants";
 import ErrorBoundary from "@/utils/ErrorBoundary";
+import MarkerPositionDisplay from "./MarkerPositionDisplay";
 
 declare global {
   interface Window {
@@ -192,8 +192,6 @@ const MapView: React.FC<MapViewProps> = ({
             fillColor="rgba(0, 100, 255, 0.1)"
             outlineColor="#0064ff"
             outlineWidth={1}
-            useDirectData={true}
-            pinCodeData={SAMPLE_PIN_CODE_DATA}
             autoZoom={true}
             onLayerLoaded={() =>
               console.log("PinCodeLayer loaded successfully")
@@ -211,13 +209,7 @@ const MapView: React.FC<MapViewProps> = ({
         </div>
       )}
       {markerPosition && (
-        <div className="mt-4 p-4 bg-white shadow rounded-lg">
-          <h3 className="text-lg font-medium text-gray-900">Marker Position</h3>
-          <p className="mt-2 text-sm text-gray-500">
-            Longitude: {markerPosition.lng.toFixed(6)}, Latitude:{" "}
-            {markerPosition.lat.toFixed(6)}
-          </p>
-        </div>
+        <MarkerPositionDisplay position={markerPosition} />
       )}{" "}
     </div>
   );

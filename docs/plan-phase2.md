@@ -2,6 +2,24 @@
 
 The following tasks will optimize and enhance the PIN code boundary rendering functionality:
 
+## 0. Code Structure and Module Improvements
+
+**Tasks:**
+- ✅ Fix TypeScript module imports for mapbox-gl
+  - Replace UMD global references with proper ES module imports
+  - Use imported classes directly instead of accessing through global namespace
+- Optimize data loading strategy
+  - Remove hardcoded data imports
+  - Implement dynamic data loading from API/files
+- Refactor component architecture
+  - Separate map rendering from data handling logic
+  - Create reusable components for map features
+
+**Expected Results:**
+- Cleaner, more maintainable codebase
+- Proper TypeScript module usage without UMD global references
+- Improved code organization and separation of concerns
+
 ## 1. Boundary Rendering Optimization
 
 **Tasks:**

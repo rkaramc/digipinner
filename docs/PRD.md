@@ -69,14 +69,26 @@ DIGIPINner is an interactive web application that allows users to work with DIGI
 - **Source**: [Data.gov.in](https://data.gov.in/catalog/all-india-pincode-boundary-geo-json)
 - **Download Date**: June 10, 2025, 10:00 AM IST
 - **Format**: GeoJSON
-- **Coverage**: All India PIN code boundaries
+- **Coverage**: All India PIN code boundaries, in geojson format
 - **License**: Open Government Data (OGD) Platform India
 
-### 6.2 DIGIPIN Specification
+### 6.2 Post Office Directory
+- **Source**: [Data.gov.in](https://www.data.gov.in/catalog/all-india-pincode-directory-through-webservice)
+- **Download Date**: June 28, 2025, 10:00 AM IST
+- **Format**: JSON
+- **Coverage**: All India PIN code directory, listing all post offices in India, with coordinates
+- **License**: Open Government Data (OGD) Platform India
+
+### 6.3 DIGIPIN Specification
 - **Source**: [India Post](https://www.indiapost.gov.in/VAS/Pages/digipin.aspx)
 - **Version**: As of June 10, 2025
 
-### 6.3 Technical Dependencies
+### 6.4 DIGIPIN Query Service
+- **Source**: [India Post](https://dac.indiapost.gov.in/mydigipin/home)
+- **Version**: As of June 10, 2025
+- **Description**: DIGIPIN Query Service is a web page that allows users to click a location on a map and get the DIGIPIN for that location. It also has a search function for DIGIPIN to map coordinates and vice versa.
+
+### 6.5 Technical Dependencies
 - Node.js (v14 or later)
 - npm or yarn
 - Mapbox GL JS (for interactive mapping)
