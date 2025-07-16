@@ -38,3 +38,33 @@ node .\data\merge-pincode-polygons.js 1 $INPUT_FILE $TEMP_DIR\p1.json
 
 # Step 3: Copy the combined 1-digit boundaries to the output directory
 Copy-Item $TEMP_DIR\p1.json $OUTPUT_DIR\p1.json
+
+# Step 4: Combine all the 2-digit boundaries into a single feature, using a node.js script
+node .\data\merge-pincode-polygons.js 2 $INPUT_FILE $TEMP_DIR\p2.json
+
+# Step 5: Copy the combined 2-digit boundaries to the output directory
+Copy-Item $TEMP_DIR\p2.json $OUTPUT_DIR\p2.json
+
+# Step 6: Combine all the 3-digit boundaries into a single feature, using a node.js script
+node .\data\merge-pincode-polygons.js 3 $INPUT_FILE $TEMP_DIR\p3.json
+
+# Step 7: Copy the combined 3-digit boundaries to the output directory
+Copy-Item $TEMP_DIR\p3.json $OUTPUT_DIR\p3.json
+
+# Step 8: Combine all the 4-digit boundaries into a single feature, using a node.js script
+node .\data\merge-pincode-polygons.js 4 $INPUT_FILE $TEMP_DIR\p4.json
+
+# Step 9: Copy the combined 4-digit boundaries to the output directory
+Copy-Item $TEMP_DIR\p4.json $OUTPUT_DIR\p4.json
+
+# Step 10: Combine all the 5-digit boundaries into a single feature, using a node.js script
+node .\data\merge-pincode-polygons.js 5 $INPUT_FILE $TEMP_DIR\p5.json
+
+# Step 11: Copy the combined 5-digit boundaries to the output directory
+Copy-Item $TEMP_DIR\p5.json $OUTPUT_DIR\p5.json
+
+# Step 12: Combine all the 6-digit boundaries into a single feature, using a node.js script
+node .\data\merge-pincode-polygons.js 6 $INPUT_FILE $TEMP_DIR\p6.json
+
+# Step 13: Copy the combined 6-digit boundaries to the output directory
+Copy-Item $TEMP_DIR\p6.json $OUTPUT_DIR\p6.json

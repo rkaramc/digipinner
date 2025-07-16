@@ -1,32 +1,18 @@
-import { useState } from "react";
 import MapView from "./components/MapView";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
 import "./App.css";
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-bold text-gray-900">DIGIPINner</h1>
-          <p className="text-sm text-gray-500">Digital PINs for India</p>
-        </div>
-      </header>
+      <Header title="digipinner" subtitle="Digital PINs for India" />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="border-2 border-dashed border-gray-300 rounded-lg h-[600px]">
-            <MapView enableMarkerPlacement={true} />
-          </div>
-        </div>
-      </main>
+      <MapView enableMarkerPlacement={true} />
 
-      <footer className="bg-white border-t border-gray-200 mt-8">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-gray-500">
-            &copy; {new Date().getFullYear()} DIGIPINner. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer
+        copyright={`© ${new Date().getFullYear()} digipinner. All rights reserved.`}
+      />
     </div>
   );
 }

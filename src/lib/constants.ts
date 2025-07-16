@@ -20,7 +20,7 @@ if (import.meta.env.DEV) {
 export const MAPBOX_ACCESS_TOKEN = MAPBOX_TOKEN;
 
 // Map style URL
-export const MAP_STYLE = "mapbox://styles/mapbox/satellite-streets-v12";
+export const MAP_STYLE = "mapbox://styles/mapbox/streets-v12";
 
 // DIGIPIN Bounds - defined as a separate constant to avoid circular dependencies
 const DIGIPIN_BOUNDS = {

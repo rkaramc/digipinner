@@ -22,3 +22,4 @@ test-results/
 .env
 debug.log
 .windsurf/
+data/temp/*

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Map, Popup } from "mapbox-gl";
 import POST_OFFICE_DATA from "../assets/delhi.json";
 import PIN_CODE_DATA from "../assets/p1.json";
+import { DIGIPIN_GRID } from "../lib/constants";
 
 interface PinCodeLayerProps {
   map: Map | null;
@@ -26,10 +27,13 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  // Track if the layer has been initialized to prevent duplicate setup
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const sourceId = "pincode-source";
   const fillLayerId = "pincode-fill-layer";
   const outlineLayerId = "pincode-outline-layer";
+  const labelLayerId = "pincode-label-layer";
 
   const zoomToPinCodeArea = () => {
     if (!map || !autoZoom) return;
@@ -50,6 +54,12 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
     }
 
     const setupLayer = () => {
+      // If already initialized, don't set up again
+      if (isInitialized) {
+        console.log("PinCodeLayer: Layer already initialized, skipping setup");
+        return;
+      }
+
       const addDataToMap = (data: GeoJSON.FeatureCollection) => {
         console.log("PinCodeLayer: Adding data to map", data);
 
@@ -79,10 +89,20 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
         }
 
         try {
-          // Safe cleanup of existing layers
+          // Safe cleanup of existing layers and sources
+          const cleanupLayer = (layerId: string) => {
+            if (map.getLayer(layerId)) {
+              map.removeLayer(layerId);
+            }
+          };
+
+          // Clean up all related layers first
+          cleanupLayer(fillLayerId);
+          cleanupLayer(outlineLayerId);
+          cleanupLayer(labelLayerId);
+
+          // Then remove the source if it exists
           if (map.getSource(sourceId)) {
-            if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
-            if (map.getLayer(outlineLayerId)) map.removeLayer(outlineLayerId);
             map.removeSource(sourceId);
           }
 
@@ -100,13 +120,26 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
             paint: { "line-color": outlineColor, "line-width": outlineWidth },
           });
 
-          setIsLoaded(true);
-          console.log("PinCodeLayer: Source and layers added successfully.");
-          onLayerLoaded?.();
-
-          if (autoZoom) {
-            zoomToPinCodeArea();
-          }
+          // Add a symbol layer for pincode prefix labels
+          map.addLayer({
+            id: labelLayerId,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              "text-field": ["get", "PincodePrefix"],
+              "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+              "text-size": 14,
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+              "text-anchor": "center",
+              "text-justify": "center",
+            },
+            paint: {
+              "text-color": "#000000",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 2,
+            },
+          });
         } catch (error) {
           console.error("PinCodeLayer: Error adding source or layers:", error);
           setError(error as Error);
@@ -116,37 +149,30 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
 
       const addPostOfficesToMap = (data: GeoJSON.FeatureCollection) => {
         console.log("PinCodeLayer: Adding post offices to map", data);
-        
-        // Debug: Log the first few office names to understand the data
-        const firstFiveOffices = data.features.slice(0, 5).map(f => ({
-          officename: f.properties?.officename,
-          pincode: f.properties?.pincode,
-          coordinates: f.geometry.type === 'Point' ? f.geometry.coordinates : null
-        }));
-        console.log("DEBUG - First 5 office names in data:", firstFiveOffices);
-        
-        // Also log all office names to see if there are duplicates or issues
-        const allOfficeNames = data.features.map(f => f.properties?.officename).filter(Boolean);
-        console.log("DEBUG - All office names:", allOfficeNames);
-        console.log("DEBUG - Total features:", data.features.length);
 
         try {
-          // Remove existing layers if they exist
-          if (map.getLayer("postoffice-markers")) {
-            map.removeLayer("postoffice-markers");
-          }
+          const postOfficeSourceId = "postoffice-source";
+          const postOfficeMarkersId = "postoffice-markers";
+          const postOfficeLabelsId = "postoffice-labels";
 
-          if (map.getLayer("postoffice-labels")) {
-            map.removeLayer("postoffice-labels");
-          }
+          // Safe cleanup function for layers
+          const cleanupLayer = (layerId: string) => {
+            if (map.getLayer(layerId)) {
+              map.removeLayer(layerId);
+            }
+          };
+
+          // Remove existing layers if they exist
+          cleanupLayer(postOfficeMarkersId);
+          cleanupLayer(postOfficeLabelsId);
 
           // Remove existing source if it exists
-          if (map.getSource("postoffice-source")) {
-            map.removeSource("postoffice-source");
+          if (map.getSource(postOfficeSourceId)) {
+            map.removeSource(postOfficeSourceId);
           }
 
           // Add the GeoJSON source
-          map.addSource("postoffice-source", { type: "geojson", data });
+          map.addSource(postOfficeSourceId, { type: "geojson", data });
         } catch (error) {
           console.error(
             "PinCodeLayer: Error removing or adding source/layers:",
@@ -200,7 +226,7 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
         const popup = new Popup({
           closeButton: false,
           closeOnClick: false,
-        })
+        });
 
         // Add click event to show post office details
         map.on("mouseenter", "postoffice-markers", (e) => {
@@ -221,19 +247,25 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
                 // Create popup content with compact styling
                 const popupContent = `
                   <div style="color: #333; font-family: Arial, sans-serif; padding: 1px; line-height: 1.1;">
-                    <h3 style="color: #1a1a1a; margin: 0 0 2px 0; font-size: 11px; font-weight: bold;">${properties.officename || "Post Office"}</h3>
-                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Pincode: <strong>${properties.pincode || "N/A"}</strong></p>
-                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Type: ${properties.officetype || "N/A"}</p>
-                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Division: ${properties.divisionname || "N/A"}</p>
+                    <h3 style="color: #1a1a1a; margin: 0 0 2px 0; font-size: 11px; font-weight: bold;">${
+                      properties.officename || "Post Office"
+                    }</h3>
+                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Pincode: <strong>${
+                      properties.pincode || "N/A"
+                    }</strong></p>
+                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Type: ${
+                      properties.officetype || "N/A"
+                    }</p>
+                    <p style="color: #333; margin: 1px 0; font-size: 9px;">Division: ${
+                      properties.divisionname || "N/A"
+                    }</p>
                   </div>
                 `;
 
                 console.log("Creating popup with content:", popupContent);
 
                 // Create popup at the clicked location
-                popup.setLngLat(coordinates)
-                  .setHTML(popupContent)
-                  .addTo(map);
+                popup.setLngLat(coordinates).setHTML(popupContent).addTo(map);
               }
             } catch (error) {
               console.error("Error creating popup:", error);
@@ -247,8 +279,33 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
         });
       };
 
-      addDataToMap(PIN_CODE_DATA as GeoJSON.FeatureCollection);
-      addPostOfficesToMap(POST_OFFICE_DATA as GeoJSON.FeatureCollection);
+      // const addDIGIPINBoundsToMap = (level: number, location: [number, number]) => {
+      //   // Use DIGIPIN_GRID.BOUNDS to access the DIGIPIN_BOUNDS object
+      //   const bounds = DIGIPIN_GRID.BOUNDS.toBounds();
+      //   map.fitBounds(bounds, { padding: 50, duration: 1500 });
+
+      //   console.log("DIGIPIN bounds applied at level:", level, "for location:", location);
+      // };
+
+      try {
+        addDataToMap(PIN_CODE_DATA as GeoJSON.FeatureCollection);
+        addPostOfficesToMap(POST_OFFICE_DATA as GeoJSON.FeatureCollection);
+        // addDIGIPINBoundsToMap(1, [0, 0])
+        
+        // Only mark as loaded if we can verify the layers exist
+        if (map.getLayer(fillLayerId) && map.getLayer(outlineLayerId)) {
+          setIsLoaded(true);
+          setIsInitialized(true);
+          console.log("PinCodeLayer: Source and layers added successfully.");
+          onLayerLoaded?.();
+        } else {
+          throw new Error("Layers were not created successfully");
+        }
+      } catch (error) {
+        console.error("PinCodeLayer: Failed to add layers:", error);
+        setError(error as Error);
+        onError?.(error as Error);
+      }
     };
 
     try {
@@ -279,11 +336,31 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
       map.off("load", setupLayer);
       if (map && map.getStyle() !== undefined) {
         try {
+          // Clean up function for layers
+          const cleanupLayer = (layerId: string) => {
+            if (map.getLayer(layerId)) {
+              map.removeLayer(layerId);
+            }
+          };
+
+          // Clean up all layers
+          cleanupLayer(fillLayerId);
+          cleanupLayer(outlineLayerId);
+          cleanupLayer(labelLayerId);
+          cleanupLayer("postoffice-markers");
+          cleanupLayer("postoffice-labels");
+
+          // Clean up sources
           if (map.getSource(sourceId)) {
-            if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
-            if (map.getLayer(outlineLayerId)) map.removeLayer(outlineLayerId);
             map.removeSource(sourceId);
           }
+
+          if (map.getSource("postoffice-source")) {
+            map.removeSource("postoffice-source");
+          }
+
+          // Reset initialization state
+          setIsInitialized(false);
         } catch (error) {
           console.warn(
             "PinCodeLayer: Error during cleanup, map may already be removed.",
@@ -292,38 +369,50 @@ const PinCodeLayer: React.FC<PinCodeLayerProps> = ({
         }
       }
     };
-  }, [
-    map,
-    autoZoom,
-    fillColor,
-    outlineColor,
-    outlineWidth,
-  ]);
+  }, [map, autoZoom, fillColor, outlineColor, outlineWidth, isInitialized]);
 
   // Effect for updating visibility
   useEffect(() => {
     if (!map || !isLoaded) return;
 
-    const visibility = visible ? "visible" : "none";
-    console.log(`PinCodeLayer: Updating visibility to '${visibility}'.`);
-    map.setLayoutProperty(fillLayerId, "visibility", visibility);
-    map.setLayoutProperty(outlineLayerId, "visibility", visibility);
-  }, [visible, isLoaded, map]);
+    try {
+      // Check if layers exist before updating properties
+      if (map.getLayer(fillLayerId) && map.getLayer(outlineLayerId)) {
+        const visibility = visible ? "visible" : "none";
+        console.log(`PinCodeLayer: Updating visibility to '${visibility}'.`);
+        map.setLayoutProperty(fillLayerId, "visibility", visibility);
+        map.setLayoutProperty(outlineLayerId, "visibility", visibility);
+      } else {
+        console.warn("PinCodeLayer: Cannot update visibility - layers don't exist");
+      }
+    } catch (error) {
+      console.error("PinCodeLayer: Error updating visibility:", error);
+    }
+  }, [visible, isLoaded, map, fillLayerId, outlineLayerId]);
 
   // Effect for updating paint properties
   useEffect(() => {
     if (!map || !isLoaded) return;
 
-    console.log("PinCodeLayer: Updating paint properties.");
-    map.setPaintProperty(fillLayerId, "fill-color", fillColor);
-    map.setPaintProperty(fillLayerId, "fill-opacity", 0.8);
-    map.setPaintProperty(outlineLayerId, "line-color", outlineColor);
-    map.setPaintProperty(
-      outlineLayerId,
-      "line-width",
-      Math.max(outlineWidth, 2)
-    );
-  }, [fillColor, outlineColor, outlineWidth, isLoaded, map]);
+    try {
+      // Check if layers exist before updating properties
+      if (map.getLayer(fillLayerId) && map.getLayer(outlineLayerId)) {
+        console.log("PinCodeLayer: Updating paint properties.");
+        map.setPaintProperty(fillLayerId, "fill-color", fillColor);
+        map.setPaintProperty(fillLayerId, "fill-opacity", 0.8);
+        map.setPaintProperty(outlineLayerId, "line-color", outlineColor);
+        map.setPaintProperty(
+          outlineLayerId,
+          "line-width",
+          Math.max(outlineWidth, 2)
+        );
+      } else {
+        console.warn("PinCodeLayer: Cannot update paint properties - layers don't exist");
+      }
+    } catch (error) {
+      console.error("PinCodeLayer: Error updating paint properties:", error);
+    }
+  }, [fillColor, outlineColor, outlineWidth, isLoaded, map, fillLayerId, outlineLayerId]);
 
   return null;
 };
